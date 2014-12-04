@@ -1,4 +1,4 @@
-/*	$NetBSD: compcache.h */
+/*	$NetBSD	*/
 
 /*-
  * This code has been donated to The NetBSD Foundation by the Author.
@@ -39,21 +39,21 @@
 #define NUM_COMP_PAGES      100
 
 typedef struct cachenode {
-        unsigned    node_size;
-        daddr_t     blkno;
-        vaddr_t     start;
-        char        *cache_addr;
         struct cachenode *next;
+        char        *cache_addr;
+        daddr_t     blkno;
+        unsigned    node_size;
+        char        zero_page;
 } cnode_t;
 
 
 typedef struct compcache {
         kmutex_t    cmut;
-        cnode_t     *index;
-        char        *stagearea;
-        vmem_t      *stagearena;
-        char        *compressarea;
         vmem_t      *compressarena;
+        cnode_t     *index;
+        vmem_t      *stagearena;
+        char        *stagearea;
+        char        *compressarea;
         char        buffer[PAGE_SIZE];
 } compcache_t;
 

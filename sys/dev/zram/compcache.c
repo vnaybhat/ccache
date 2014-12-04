@@ -76,6 +76,9 @@ static char *ccache_alloc(compcache_t *ccacahe, size_t size);
 static void  def_zfree(voidpf opaque, voidpf ptr);
 static voidpf def_zcalloc(voidpf opaque, unsigned items, unsigned size);
 
+/* Static helpers - Generic helpers */
+static int is_zero(char *data);
+
 /* Character device switch - is this really needed? */
 const struct cdevsw compcache_cdevsw = {
         .d_open = compcacheopen,
@@ -254,6 +257,9 @@ decomppages(struct buf *bp)
                 if(ccache->index[i].node_size == PAGE_SIZE) 
                         /* The page was stored uncompressed */
                         memcpy(output, input, PAGE_SIZE);
+                else if(ccache->index[i].zero_page == 1)
+                        /* This is a zero page, nothing was stored */
+                        memset(output, 0, PAGE_SIZE);
                 else {
                         /* Initialize zlib stream */
                         memset(&strm, 0, sizeof(z_stream));
@@ -309,7 +315,6 @@ comppages(struct buf *bp)
         daddr_t  cur_blkno;
         char *input, *output;
         char *cache_addr;
-        //int temp = 0;
 
         KASSERT(bp != NULL);
 
@@ -320,9 +325,6 @@ comppages(struct buf *bp)
 
         mutex_enter(&ccache->cmut);
 
-        //while(temp < 10000000) temp++;
-        //printf("Compressing for blocks starting from %d\n", (int)cur_blkno);
-
         output = ccache->buffer;
         while(curpage < npages) {
                 KASSERT(i < NUMPAGES);
@@ -331,14 +333,21 @@ comppages(struct buf *bp)
                 if(ccache->index[i].node_size)
                         ccache_free(&(ccache->index[i]));
 
+                /* Get the address of next input location */
+                input = (char *) ((char *)bp->b_data +
+                        (PAGE_SIZE * curpage));
+
+                if(is_zero(input)) {
+                        ccache->index[i].node_size = 0;
+                        ccache->index[i].zero_page = 1;
+                        ccache->index[i].cache_addr = NULL;
+                        goto done;
+                }
+
                 memset(&strm, 0, sizeof(z_stream));
                 strm.zalloc = def_zcalloc;
                 strm.zfree  = def_zfree;
                 strm.opaque = Z_NULL;
-
-                /* Get the address of next input location */
-                input = (char *) ((char *)bp->b_data +
-                        (PAGE_SIZE * curpage));
 
                 if(deflateInit2(&strm, Z_DEFAULT_COMPRESSION,
                             Z_DEFLATED, 15, 8, 
@@ -373,7 +382,9 @@ comppages(struct buf *bp)
                         }
                         deflateEnd(&strm);
                 }
+                ccache->index[i].zero_page = 0;
 
+done:
                 ccache->index[i].blkno = cur_blkno;
 
                 cur_blkno += 8;
@@ -591,5 +602,20 @@ compressor_init(compcache_t *cache)
         return 1;
 }
 /*************************** Cache init destroy *****************************/
+/****************************************************************************/
+/****************************************************************************/
+
+/************************* Other static helpers *****************************/
+static int
+is_zero(char *data)
+{
+        int i;
+        for(i = 0; i < PAGE_SIZE; i++)
+                if(data[i] != 0)
+                        return 0;
+
+        return 1;
+}
+/************************* Other static helpers *****************************/
 /****************************************************************************/
 /****************************************************************************/
