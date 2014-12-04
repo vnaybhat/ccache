@@ -1,9 +1,6 @@
-/*	$NetBSD: pseudo_dev_skel.h,v 1.1 2007/06/09 11:33:50 dsieger Exp $	*/
+/*	$NetBSD: compcache.h */
 
 /*-
- * Copyright (c) 1998-2006 Brett Lymn (blymn@NetBSD.org)
- * All rights reserved.
- *
  * This code has been donated to The NetBSD Foundation by the Author.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,34 +25,38 @@
  *
  */
 
-/*
- *
- * Definitions for the Skeleton pseudo device.
- *
- */
 #include <sys/param.h>
 #include <sys/device.h>
+#include <sys/vmem.h>
 
-#ifndef COMPCACHE_H
-#define COMPCACHE_H 1
+#ifndef _COMPCACHE_H_
+#define _COMPCACHE_H_ 
 
-#if 0
-struct skeleton_params
-{
-	int number;
-	char string[80];
-};
-#endif
+#define NUMPAGES             (1 << 12)
+#define CCACHE_BLOCK_SIZE    512
+#define BLKS_PER_PAGE_SHIFT  3
+#define QUANTUM              1
+#define NUM_COMP_PAGES      100
 
-#define SKELTEST _IOW('S', 0x1, struct skeleton_params)
+typedef struct cachenode {
+        unsigned    node_size;
+        daddr_t     blkno;
+        vaddr_t     start;
+        char        *cache_addr;
+        struct cachenode *next;
+} cnode_t;
 
-#ifdef _KERNEL
 
-/*
- * Put kernel inter-module interfaces here, this
- * pseudo device has none.
- */
+typedef struct compcache {
+        kmutex_t    cmut;
+        cnode_t     *index;
+        char        *stagearea;
+        vmem_t      *stagearena;
+        char        *compressarea;
+        vmem_t      *compressarena;
+        char        buffer[PAGE_SIZE];
+} compcache_t;
 
-#endif
-#endif
+
+#endif  /* _COMPCACHE_H_ */
 

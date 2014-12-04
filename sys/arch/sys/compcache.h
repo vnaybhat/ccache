@@ -1,9 +1,6 @@
-/*	$NetBSD: pseudo_dev_skel.h,v 1.1 2007/06/09 11:33:50 dsieger Exp $	*/
+/*	$NetBSD: compcache.h */
 
 /*-
- * Copyright (c) 1998-2006 Brett Lymn (blymn@NetBSD.org)
- * All rights reserved.
- *
  * This code has been donated to The NetBSD Foundation by the Author.
  *
  * Redistribution and use in source and binary forms, with or without
