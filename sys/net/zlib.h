@@ -471,6 +471,7 @@ ZEXTERN const char * ZEXPORT zlibVersion(void);
 
 /*
 ZEXTERN int ZEXPORT deflateInit(z_streamp, int);
+
      Initializes the internal stream state for compression. The fields
    zalloc, zfree and opaque must be initialized before by the caller.
    If zalloc and zfree are set to Z_NULL, deflateInit updates them to
@@ -489,6 +490,7 @@ ZEXTERN int ZEXPORT deflateInit(z_streamp, int);
    msg is set to null if there is no error message.  deflateInit does not
    perform any compression: this will be done by deflate().
 */
+
 
 ZEXTERN int ZEXPORT deflate(z_streamp, int);
 /*
@@ -701,7 +703,6 @@ ZEXTERN int ZEXPORT inflateEnd(z_streamp);
 
 ZEXTERN int ZEXPORT deflateInit2(z_streamp, int, int, int, int, int);
 /*
-
      This is another version of deflateInit with more compression options. The
    fields next_in, zalloc, zfree and opaque must be initialized before by
    the caller.

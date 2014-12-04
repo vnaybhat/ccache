@@ -51,7 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: zlib.c,v 1.34 2013/12/29 08:09:44 pgoyette Exp $");
 #define _Z_UTIL_H
 
 #include "zlib.h"
-#include <sys/malloc.h>
 
 #if defined(KERNEL) || defined(_KERNEL)
 /* Assume this is a *BSD or SVR4 kernel */
@@ -552,8 +551,6 @@ typedef struct deflate_state {
  * distances are limited to MAX_DIST instead of WSIZE.
  */
 
-static int inited = 0;
-
         /* in trees.c */
 void _tr_init(deflate_state *s);
 int  _tr_tally(deflate_state *s, unsigned dist, unsigned lc);
@@ -802,11 +799,10 @@ struct static_tree_desc_s {int dummy;}; /* for buggy compilers */
 
 /* ========================================================================= */
 int ZEXPORT deflateInit_(z_streamp strm,
-	int level, const char *my_version, int stream_size)
+	int level, const char *z_version, int stream_size)
 {
-   
     return deflateInit2_(strm, level, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL,
-			 Z_DEFAULT_STRATEGY, my_version, stream_size);
+			 Z_DEFAULT_STRATEGY, z_version, stream_size);
     /* To do: ignore strm->next_in if we use it as window */
 }
 
@@ -815,9 +811,6 @@ int ZEXPORT deflateInit2_(z_streamp strm,
 	int level, int method, int windowBits, int memLevel, int strategy,
 	const char *vers, int stream_size)
 {
-    inited = 1;
-    if(!inited)
-        printf("In deflate init\n");
     deflate_state *s;
     int noheader = 0;
     static const char* my_version = ZLIB_VERSION;
@@ -857,7 +850,6 @@ int ZEXPORT deflateInit2_(z_streamp strm,
         return Z_STREAM_ERROR;
     }
     s = (deflate_state *) ZALLOC(strm, 1, sizeof(deflate_state));
-
     if (s == Z_NULL) return Z_MEM_ERROR;
     strm->state = (struct internal_state FAR *)s;
     s->strm = strm;
@@ -881,6 +873,7 @@ int ZEXPORT deflateInit2_(z_streamp strm,
     overlay = (ushf *) ZALLOC(strm, s->lit_bufsize, sizeof(ush)+2);
     s->pending_buf = (uchf *) overlay;
     s->pending_buf_size = (ulg)s->lit_bufsize * (sizeof(ush)+2L);
+
     if (s->window == Z_NULL || s->prev == Z_NULL || s->head == Z_NULL ||
         s->pending_buf == Z_NULL) {
         strm->msg = ERR_MSG(Z_MEM_ERROR);
@@ -1050,9 +1043,6 @@ local void flush_pending(z_streamp strm)
 /* ========================================================================= */
 int ZEXPORT deflate (z_streamp strm, int flush)
 {
-    if(!inited)
-        printf("In deflate\n");
-
     int old_flush; /* value of flush param for previous deflate call */
     deflate_state *s;
 
@@ -1188,9 +1178,6 @@ int ZEXPORT deflate (z_streamp strm, int flush)
 /* ========================================================================= */
 int ZEXPORT deflateEnd (z_streamp strm)
 {
-    if(!inited)
-        printf("In deflate end\n");
-    inited = 1;
     int status;
     deflate_state *s;
 
@@ -3501,7 +3488,6 @@ int ZEXPORT inflateInit2_(z_streamp z, int w, const char *vers, int stream_size)
 }
 
 
-// VINAY
 int ZEXPORT inflateInit_(z_streamp z, const char *vers, int stream_size)
 {
   return inflateInit2_(z, DEF_WBITS, vers, stream_size);
@@ -5778,7 +5764,6 @@ void  zcfree (voidpf opaque, voidpf ptr)
 voidpf zcalloc (voidpf opaque, unsigned items, unsigned size)
 {
     if (opaque) opaque = 0; /* to make compiler happy */
-
     return _halloc((long)items, size);
 }
 
