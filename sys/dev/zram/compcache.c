@@ -1,4 +1,4 @@
-/*	$NetBSD: compcache.c,v 1.2 2014/10/09 15:07:41 */
+/*	$NetBSD */
 
 /*-
  * This code has been donated to The NetBSD Foundation by the Author.
@@ -149,7 +149,6 @@ compcacheopen(dev_t device, int flags, int fmt, struct lwp *process)
         }
 
         mutex_init(&ccache->cmut, MUTEX_DEFAULT, IPL_NONE);
-        printf("Initialized compressed cache.\n");
         return 0;
 
 err:
@@ -181,15 +180,14 @@ compcachesize(dev_t device)
 
 /*
  * Handle the close request for the device.
+ * Here we have to deallocate all the resources allocated for our
+ * compressed swap. This mainly deasl with destroying all the arena's
+ * and then freeing up the memory related to that arena. Other resources
+ * like mutexes should also be destroyed.
  */
 int
 compcacheclose(dev_t device, int flags, int fmt, struct lwp *process)
 {
-        printf("In compcacheclose\n");
-        printf("In compcacheclose\n");
-        printf("In compcacheclose\n");
-        printf("In compcacheclose\n");
-
         cache_destroy(ccache);
         compressor_destroy(ccache);
 
@@ -200,7 +198,12 @@ compcacheclose(dev_t device, int flags, int fmt, struct lwp *process)
 }
 
 /*
- * Handle the ioctl for the device
+ * Handle the ioctl for the device.
+ * We are not provideing a character device interface to oyr swap space
+ * Hence this is not needed
+ * XXX: Once the cache device is fully functional and we are ready to analyze
+ * performce, we can use this as a user space interface to get the swap 
+ * statistics for performance analysis.
  */
 int
 compcacheioctl(dev_t device, u_long command, void* data, int flags,
@@ -209,6 +212,11 @@ compcacheioctl(dev_t device, u_long command, void* data, int flags,
 	return 0;
 }
 
+/*
+ * The strategy routine. Mainly deals with calling appropriate routines.
+ * For read requet, calls decompress page routine.
+ * For write request, calls compress pages routine
+ */
 void
 compcachestrategy(struct buf *bp)
 {
@@ -228,11 +236,25 @@ compcachestrategy(struct buf *bp)
         biodone(bp);
         return;
 }
+
 /****************** Functions exposed to the outside world ******************/
 /****************************************************************************/
 /****************************************************************************/
 
 /******************** Compression/Decompression related *********************/
+/*
+ * The decompress routine. Called on a read request on this device.
+ * Identifies if a page is zero-page, non-compressed page or a compressed-page
+ * and handles it appropriately.
+ * A zero-page is one which is not stored because the entire page content is
+ * always zero.
+ * A non-compressed page is one which is stored uncompressed mainly because
+ * the zlib library could not compress this page (in future we can think of 
+ * storing those pages whose compression ratio is below a certain threshold 
+ * also as a non-compressed page.
+ * A compressed page is one which was previously compressed by zlib. Use the
+ * page metadata to decompress now.
+ */
 static int
 decomppages(struct buf *bp)
 {
@@ -307,6 +329,20 @@ decomppages(struct buf *bp)
         return 0;
 }
 
+/*
+ * The dcompress routine. Called on a write request on this device.
+ * Identifies if a page is zero-page, non-compressable page or a 
+ * compresable page and handles it appropriately.
+ * A zero-page is one which is not stored because the entire page content is
+ * always zero.
+ * A non-compressable page is one which is stored uncompressed mainly because
+ * the zlib library could not compress this page (in future we can think of 
+ * storing those pages whose compression ratio is below a certain threshold 
+ * also as a non-compressed page).
+ * A compressed page is one which was can be compressed by the zlib library
+ * and hence appropriate metadata is also stored along with the compressed 
+ * data
+ */
 static int
 comppages(struct buf *bp)
 {
@@ -400,7 +436,6 @@ done:
 /****************************************************************************/
 /****************************************************************************/
 
-
 /********************** Cache memory management *****************************/
 static char *
 ccache_alloc(compcache_t *cache, size_t size)
@@ -417,11 +452,10 @@ ccache_alloc(compcache_t *cache, size_t size)
                 (int)vmem_size(cache->stagearena, VMEM_ALLOC),
                 (int)vmem_size(cache->stagearena, VMEM_FREE),
                 (int)vmem_size(cache->stagearena, VMEM_FREE|VMEM_ALLOC));
-
-            /* Only for debugging purpose now, will be removed later */
-            while(1);
-            KASSERT(0);
         }
+
+        /* Ideally should never happen, assert if it does */
+        KASSERT(ret == 0);
 
         return (char *)cache_addr;
 
@@ -462,10 +496,10 @@ def_zcalloc(voidpf opaque, unsigned items, unsigned size)
             printf("Failed to alloc %d bytes from compressareana. "
                    "ret=%d, cache_addr = %p\n", 
                 (int)(size*items), (int)ret, (void *)cache_addr);
-            /* Only for debugging purpose */
-            while(1)
-            KASSERT(0);
         }
+
+        /* Should never happen, assert if it does */
+        KASSERT(ret == 0);
 
         /* Store the size, needed later for free */
         *((unsigned *)cache_addr) = size;
@@ -523,12 +557,13 @@ cache_destroy(compcache_t *cache)
         }
 
 
-         return;
+        return;
 }
 
 static int 
 cache_init(compcache_t *cache)
 {
+        /* Allocate memory for the cache */
         cache->stagearea = (char *) uvm_km_alloc(kernel_map,
             (NUMPAGES)*PAGE_SIZE, PAGE_SIZE,
             UVM_KMF_WIRED | UVM_KMF_CANFAIL | UVM_KMF_NOWAIT);
@@ -538,6 +573,7 @@ cache_init(compcache_t *cache)
         }
         memset(cache->stagearea, 0, (NUMPAGES)*PAGE_SIZE);
 
+        /* Create the cache arena */
         cache->stagearena = vmem_create("stage_arena",
             (vmem_addr_t)cache->stagearea,
             (NUMPAGES)*PAGE_SIZE, QUANTUM, NULL, NULL, NULL,
@@ -590,6 +626,7 @@ compressor_init(compcache_t *cache)
         }
         memset(cache->compressarea, 0, (NUM_COMP_PAGES)*PAGE_SIZE);
 
+        /* Initialize the compress arena */
         cache->compressarena = vmem_create("compress_arena", 
             (vmem_addr_t)cache->compressarea,
             (NUM_COMP_PAGES)*PAGE_SIZE, QUANTUM, NULL, NULL, NULL,
@@ -606,6 +643,7 @@ compressor_init(compcache_t *cache)
 /****************************************************************************/
 
 /************************* Other static helpers *****************************/
+/* Check if the entire page is a zero filled page */
 static int
 is_zero(char *data)
 {
